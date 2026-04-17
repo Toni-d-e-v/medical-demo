@@ -1,0 +1,139 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Public+Sans:wght@400;500;600&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 210 40% 98%;
+    --foreground: 215 25% 17%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 215 25% 17%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 215 25% 17%;
+
+    --primary: 175 85% 32%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 210 40% 96%;
+    --secondary-foreground: 215 25% 17%;
+
+    --muted: 210 20% 94%;
+    --muted-foreground: 215 14% 46%;
+
+    --accent: 38 92% 50%;
+    --accent-foreground: 0 0% 100%;
+
+    --success: 142 71% 45%;
+    --success-foreground: 0 0% 100%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 214 20% 90%;
+    --input: 214 20% 90%;
+    --ring: 175 85% 32%;
+
+    --radius: 0.75rem;
+
+    --sidebar-background: 0 0% 100%;
+    --sidebar-foreground: 215 25% 27%;
+    --sidebar-primary: 175 85% 32%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 175 30% 95%;
+    --sidebar-accent-foreground: 175 85% 28%;
+    --sidebar-border: 214 20% 92%;
+    --sidebar-ring: 175 85% 32%;
+
+    --font-display: 'Inter', sans-serif;
+    --font-body: 'Public Sans', sans-serif;
+  }
+
+  .dark {
+    --background: 215 25% 9%;
+    --foreground: 210 40% 96%;
+    --card: 215 25% 12%;
+    --card-foreground: 210 40% 96%;
+    --popover: 215 25% 12%;
+    --popover-foreground: 210 40% 96%;
+    --primary: 175 85% 38%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 215 20% 18%;
+    --secondary-foreground: 210 40% 96%;
+    --muted: 215 20% 18%;
+    --muted-foreground: 215 14% 60%;
+    --accent: 38 92% 50%;
+    --accent-foreground: 0 0% 100%;
+    --success: 142 71% 45%;
+    --success-foreground: 0 0% 100%;
+    --destructive: 0 62% 30%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 215 20% 20%;
+    --input: 215 20% 20%;
+    --ring: 175 85% 38%;
+    --sidebar-background: 215 25% 10%;
+    --sidebar-foreground: 210 40% 90%;
+    --sidebar-primary: 175 85% 38%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 215 20% 16%;
+    --sidebar-accent-foreground: 175 85% 45%;
+    --sidebar-border: 215 20% 18%;
+    --sidebar-ring: 175 85% 38%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-family: var(--font-body);
+  }
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-display);
+  }
+}
+
+@layer components {
+  .badge-score {
+    @apply inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-semibold;
+    background: hsl(var(--accent) / 0.15);
+    color: hsl(38 92% 40%);
+  }
+
+  .dialog-bubble {
+    @apply relative p-4 rounded-xl shadow-sm border;
+    background: hsl(var(--card));
+    border-color: hsl(var(--border));
+  }
+  .dialog-bubble::before {
+    content: '';
+    @apply absolute -left-2 top-4 w-4 h-4 rotate-45 border-l border-b;
+    background: hsl(var(--card));
+    border-color: hsl(var(--border));
+  }
+
+  .roadmap-node {
+    @apply w-10 h-10 rounded-full flex items-center justify-center text-sm font-semibold border-2 transition-all duration-300;
+  }
+  .roadmap-node--completed {
+    background: hsl(var(--success));
+    border-color: hsl(var(--success));
+    color: hsl(var(--success-foreground));
+  }
+  .roadmap-node--active {
+    background: hsl(var(--primary));
+    border-color: hsl(var(--primary));
+    color: hsl(var(--primary-foreground));
+    box-shadow: 0 0 0 4px hsl(var(--primary) / 0.2);
+  }
+  .roadmap-node--upcoming {
+    background: hsl(var(--muted));
+    border-color: hsl(var(--border));
+    color: hsl(var(--muted-foreground));
+  }
+}
