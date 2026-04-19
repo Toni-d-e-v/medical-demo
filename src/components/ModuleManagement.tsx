@@ -49,6 +49,8 @@ import {
   Mic,
   FileText,
   Film,
+  Upload,
+  Paperclip,
 } from "lucide-react";
 import { useRealtimeRefresh } from "@/hooks/useRealtimeRefresh";
 
@@ -66,6 +68,7 @@ interface ModuleForm {
   day: number;
   category: string;
   videoUrl: string;
+  pdfUrl: string;
   quizQuestions: QuizQuestionForm[];
 }
 
@@ -78,6 +81,7 @@ interface DbModule {
   day: number;
   category: string;
   video_url: string | null;
+  pdf_url: string | null;
   is_active: boolean;
   created_at: string;
 }
@@ -101,6 +105,7 @@ const emptyForm: ModuleForm = {
   day: 1,
   category: "Grundlagen",
   videoUrl: "",
+  pdfUrl: "",
   quizQuestions: [],
 };
 
@@ -124,8 +129,10 @@ export function ModuleManagement() {
 
   type AiJob = null | "audio" | "doc" | "video";
   const [aiLoading, setAiLoading] = useState<AiJob>(null);
+  const [pdfUploading, setPdfUploading] = useState(false);
   const audioInputRef = useRef<HTMLInputElement>(null);
   const docInputRef = useRef<HTMLInputElement>(null);
+  const pdfInputRef = useRef<HTMLInputElement>(null);
 
   // Drag and drop state
   const [dragIdx, setDragIdx] = useState<number | null>(null);
@@ -258,6 +265,7 @@ export function ModuleManagement() {
       day: mod.day,
       category: mod.category,
       videoUrl: mod.video_url ?? "",
+      pdfUrl: mod.pdf_url ?? "",
       quizQuestions,
     });
     setDialogOpen(true);
@@ -333,6 +341,33 @@ export function ModuleManagement() {
     }
   };
 
+  const handleUploadPdf = async (file: File) => {
+    if (file.type !== "application/pdf" && !file.name.toLowerCase().endsWith(".pdf")) {
+      toast({ title: "Nur PDF erlaubt", variant: "destructive" });
+      return;
+    }
+    if (file.size > 50 * 1024 * 1024) {
+      toast({ title: "Datei zu gross", description: "Maximal 50 MB erlaubt.", variant: "destructive" });
+      return;
+    }
+    setPdfUploading(true);
+    try {
+      const path = `${crypto.randomUUID()}.pdf`;
+      const { error: uploadError } = await supabase.storage
+        .from("module-pdfs")
+        .upload(path, file, { contentType: "application/pdf", upsert: false });
+      if (uploadError) throw uploadError;
+      const { data } = supabase.storage.from("module-pdfs").getPublicUrl(path);
+      setForm((f) => ({ ...f, pdfUrl: data.publicUrl }));
+      toast({ title: "PDF hochgeladen", description: file.name });
+    } catch (err: any) {
+      toast({ title: "Upload fehlgeschlagen", description: err.message, variant: "destructive" });
+    } finally {
+      setPdfUploading(false);
+      if (pdfInputRef.current) pdfInputRef.current.value = "";
+    }
+  };
+
   const handleGenerateVideo = async () => {
     if (!form.content.trim()) {
       toast({ title: "Kein Inhalt", description: "Bitte zuerst Lerninhalt eingeben.", variant: "destructive" });
@@ -379,6 +414,7 @@ export function ModuleManagement() {
             day: form.day,
             category: form.category,
             video_url: form.videoUrl || null,
+            pdf_url: form.pdfUrl || null,
           })
           .eq("id", editingId);
 
@@ -398,6 +434,7 @@ export function ModuleManagement() {
             day: form.day,
             category: form.category,
             video_url: form.videoUrl || null,
+            pdf_url: form.pdfUrl || null,
           })
           .select("id")
           .single();
@@ -733,6 +770,58 @@ export function ModuleManagement() {
                 <Film className="h-3.5 w-3.5" />
                 {aiLoading === "video" ? "Generiere Video..." : "Strichmännchen-Video generieren"}
               </Button>
+            </div>
+
+            {/* PDF-Anhang */}
+            <div className="space-y-2">
+              <Label className="flex items-center gap-1.5">
+                <Paperclip className="h-4 w-4 text-primary" />
+                PDF-Anhang (optional)
+              </Label>
+              <input
+                ref={pdfInputRef}
+                type="file"
+                accept="application/pdf,.pdf"
+                className="hidden"
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) handleUploadPdf(f);
+                }}
+              />
+              {form.pdfUrl ? (
+                <div className="flex items-center gap-2 bg-muted/50 rounded-md border p-2 text-sm">
+                  <FileText className="h-4 w-4 text-primary shrink-0" />
+                  <a
+                    href={form.pdfUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex-1 truncate text-primary hover:underline"
+                  >
+                    PDF ansehen
+                  </a>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 text-xs text-destructive hover:text-destructive"
+                    onClick={() => setForm((f) => ({ ...f, pdfUrl: "" }))}
+                  >
+                    Entfernen
+                  </Button>
+                </div>
+              ) : (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={pdfUploading}
+                  onClick={() => pdfInputRef.current?.click()}
+                  className="gap-1.5"
+                >
+                  <Upload className="h-3.5 w-3.5" />
+                  {pdfUploading ? "Lädt hoch..." : "PDF hochladen"}
+                </Button>
+              )}
             </div>
 
             {/* Quiz Questions */}

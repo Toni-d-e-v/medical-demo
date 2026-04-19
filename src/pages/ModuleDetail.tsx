@@ -8,7 +8,17 @@ import { DialogBubble } from "@/components/DialogBubble";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
-import { ArrowLeft, CheckCircle2, XCircle, Video, Pencil, Save, X, Upload, Trash2 } from "lucide-react";
+import { ArrowLeft, CheckCircle2, XCircle, Video, Pencil, Save, X, Upload, Trash2, FileText, Download } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
 import avatarImg from "@/assets/ai-avatar.png";
@@ -39,6 +49,7 @@ interface ModuleData {
   day: number;
   category: string;
   video_url: string | null;
+  pdf_url: string | null;
 }
 
 export default function ModuleDetail() {
@@ -63,16 +74,21 @@ export default function ModuleDetail() {
   const [editContent, setEditContent] = useState("");
   const [editDescription, setEditDescription] = useState("");
   const [editVideoUrl, setEditVideoUrl] = useState("");
+  const [editPdfUrl, setEditPdfUrl] = useState("");
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [pdfUploading, setPdfUploading] = useState(false);
   const [uploadedVideoUrl, setUploadedVideoUrl] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
+  const [downloadPromptOpen, setDownloadPromptOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const pdfInputRef = useRef<HTMLInputElement>(null);
   const startEditing = () => {
     if (!mod) return;
     setEditContent(mod.content || "");
     setEditDescription(mod.description || "");
     setEditVideoUrl(mod.video_url || "");
+    setEditPdfUrl(mod.pdf_url || "");
     setEditing(true);
   };
 
@@ -129,6 +145,51 @@ export default function ModuleDetail() {
     setUploadedVideoUrl(null);
   };
 
+  const handlePdfUpload = async (file: File) => {
+    if (!mod) return;
+    if (file.type !== "application/pdf" && !file.name.toLowerCase().endsWith(".pdf")) {
+      toast.error("Bitte nur PDF-Dateien hochladen");
+      return;
+    }
+    if (file.size > 50 * 1024 * 1024) {
+      toast.error("Maximale Dateigrösse: 50 MB");
+      return;
+    }
+    setPdfUploading(true);
+    const filePath = `${mod.id}/${Date.now()}.pdf`;
+    const { error: uploadError } = await supabase.storage
+      .from("module-pdfs")
+      .upload(filePath, file, { contentType: "application/pdf", upsert: false });
+    if (uploadError) {
+      toast.error("Upload fehlgeschlagen: " + uploadError.message);
+      setPdfUploading(false);
+      return;
+    }
+    const { data: urlData } = supabase.storage.from("module-pdfs").getPublicUrl(filePath);
+    setEditPdfUrl(urlData.publicUrl);
+    setPdfUploading(false);
+    toast.success("PDF hochgeladen");
+  };
+
+  const handlePdfFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) handlePdfUpload(file);
+    if (pdfInputRef.current) pdfInputRef.current.value = "";
+  };
+
+  const confirmDownloadPdf = () => {
+    if (!mod?.pdf_url) return;
+    const link = document.createElement("a");
+    link.href = mod.pdf_url;
+    link.download = `${mod.title}.pdf`;
+    link.target = "_blank";
+    link.rel = "noopener noreferrer";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    setDownloadPromptOpen(false);
+  };
+
   const saveChanges = async () => {
     if (!mod) return;
     setSaving(true);
@@ -138,6 +199,7 @@ export default function ModuleDetail() {
         content: editContent,
         description: editDescription,
         video_url: editVideoUrl.trim() || null,
+        pdf_url: editPdfUrl.trim() || null,
       })
       .eq("id", mod.id);
     setSaving(false);
@@ -145,7 +207,13 @@ export default function ModuleDetail() {
       toast.error("Fehler beim Speichern");
       return;
     }
-    setMod({ ...mod, content: editContent, description: editDescription, video_url: editVideoUrl.trim() || null });
+    setMod({
+      ...mod,
+      content: editContent,
+      description: editDescription,
+      video_url: editVideoUrl.trim() || null,
+      pdf_url: editPdfUrl.trim() || null,
+    });
     setEditing(false);
     toast.success("Änderungen gespeichert");
   };
@@ -384,6 +452,68 @@ export default function ModuleDetail() {
               })()}
             </div>
 
+            {(editing || mod.pdf_url) && (
+              <div className="bg-card rounded-xl border p-6">
+                <div className="flex items-center gap-2 mb-3">
+                  <FileText className="h-5 w-5 text-primary" />
+                  <h3 className="font-display font-semibold">PDF-Anhang</h3>
+                </div>
+                {editing ? (
+                  <div className="space-y-3">
+                    <input
+                      ref={pdfInputRef}
+                      type="file"
+                      accept="application/pdf,.pdf"
+                      className="hidden"
+                      onChange={handlePdfFileSelect}
+                    />
+                    {editPdfUrl ? (
+                      <div className="flex items-center gap-2 bg-muted/50 rounded-md border p-2 text-sm">
+                        <FileText className="h-4 w-4 text-primary shrink-0" />
+                        <a
+                          href={editPdfUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex-1 truncate text-primary hover:underline"
+                        >
+                          PDF ansehen
+                        </a>
+                        <button
+                          onClick={() => setEditPdfUrl("")}
+                          className="text-destructive hover:text-destructive/80"
+                          aria-label="PDF entfernen"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    ) : (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={pdfUploading}
+                        onClick={() => pdfInputRef.current?.click()}
+                        className="gap-1.5"
+                      >
+                        <Upload className="h-3.5 w-3.5" />
+                        {pdfUploading ? "Lädt hoch..." : "PDF hochladen (max. 50 MB)"}
+                      </Button>
+                    )}
+                  </div>
+                ) : (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setDownloadPromptOpen(true)}
+                    className="gap-1.5"
+                  >
+                    <Download className="h-4 w-4" />
+                    PDF herunterladen
+                  </Button>
+                )}
+              </div>
+            )}
+
             {questions.length > 0 && (
               <Button onClick={() => setShowQuiz(true)} className="w-full">
                 Quiz starten →
@@ -514,6 +644,21 @@ export default function ModuleDetail() {
           </AnimatePresence>
         </div>
       )}
+
+      <AlertDialog open={downloadPromptOpen} onOpenChange={setDownloadPromptOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>PDF herunterladen?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Möchten Sie das PDF für "{mod.title}" herunterladen?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Abbrechen</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDownloadPdf}>Herunterladen</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
