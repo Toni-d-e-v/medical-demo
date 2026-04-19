@@ -1,5 +1,7 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { parseDocument } from "@/lib/parseDocument";
+import { generateStickFigureVideo } from "@/lib/stickFigureVideo";
 import { useAuth } from "@/context/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -44,6 +46,9 @@ import {
   ArrowUp,
   ArrowDown,
   ArrowUpDown,
+  Mic,
+  FileText,
+  Film,
 } from "lucide-react";
 import { useRealtimeRefresh } from "@/hooks/useRealtimeRefresh";
 
@@ -116,6 +121,11 @@ export function ModuleManagement() {
   const [form, setForm] = useState<ModuleForm>({ ...emptyForm });
   const [saving, setSaving] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+
+  type AiJob = null | "audio" | "doc" | "video";
+  const [aiLoading, setAiLoading] = useState<AiJob>(null);
+  const audioInputRef = useRef<HTMLInputElement>(null);
+  const docInputRef = useRef<HTMLInputElement>(null);
 
   // Drag and drop state
   const [dragIdx, setDragIdx] = useState<number | null>(null);
@@ -283,6 +293,67 @@ export function ModuleManagement() {
           : q
       ),
     }));
+  };
+
+  const handleTranscribe = async (file: File) => {
+    if (file.size > 25 * 1024 * 1024) {
+      toast({ title: "Datei zu gross", description: "Maximal 25 MB erlaubt.", variant: "destructive" });
+      return;
+    }
+    setAiLoading("audio");
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const { data, error } = await supabase.functions.invoke("transcribe-audio", { body: formData });
+      if (error) throw error;
+      const text = (data as { text?: string } | null)?.text?.trim();
+      if (!text) throw new Error("Keine Transkription erhalten.");
+      setForm((f) => ({ ...f, content: f.content ? `${f.content}\n\n${text}` : text }));
+      toast({ title: "Transkription fertig", description: `${text.length} Zeichen eingefügt.` });
+    } catch (err: any) {
+      toast({ title: "Transkription fehlgeschlagen", description: err.message, variant: "destructive" });
+    } finally {
+      setAiLoading(null);
+      if (audioInputRef.current) audioInputRef.current.value = "";
+    }
+  };
+
+  const handleParseDoc = async (file: File) => {
+    setAiLoading("doc");
+    try {
+      const text = await parseDocument(file);
+      if (!text) throw new Error("Kein Text extrahiert. Möglicherweise ein gescanntes PDF.");
+      setForm((f) => ({ ...f, content: f.content ? `${f.content}\n\n${text}` : text }));
+      toast({ title: "Dokument importiert", description: `${text.length} Zeichen eingefügt.` });
+    } catch (err: any) {
+      toast({ title: "Import fehlgeschlagen", description: err.message, variant: "destructive" });
+    } finally {
+      setAiLoading(null);
+      if (docInputRef.current) docInputRef.current.value = "";
+    }
+  };
+
+  const handleGenerateVideo = async () => {
+    if (!form.content.trim()) {
+      toast({ title: "Kein Inhalt", description: "Bitte zuerst Lerninhalt eingeben.", variant: "destructive" });
+      return;
+    }
+    setAiLoading("video");
+    try {
+      const blob = await generateStickFigureVideo(form.content);
+      const path = `${crypto.randomUUID()}.webm`;
+      const { error: uploadError } = await supabase.storage
+        .from("module-generated-videos")
+        .upload(path, blob, { contentType: blob.type || "video/webm" });
+      if (uploadError) throw uploadError;
+      const { data } = supabase.storage.from("module-generated-videos").getPublicUrl(path);
+      setForm((f) => ({ ...f, videoUrl: data.publicUrl }));
+      toast({ title: "Video generiert", description: "URL wurde eingefügt." });
+    } catch (err: any) {
+      toast({ title: "Video-Generierung fehlgeschlagen", description: err.message, variant: "destructive" });
+    } finally {
+      setAiLoading(null);
+    }
   };
 
   const handleSave = async (e: React.FormEvent) => {
@@ -597,6 +668,50 @@ export function ModuleManagement() {
                 placeholder="Ausführlicher Lerninhalt des Moduls..."
                 rows={5}
               />
+              <div className="flex flex-wrap gap-2">
+                <input
+                  ref={audioInputRef}
+                  type="file"
+                  accept="audio/mpeg,audio/mp3,.mp3"
+                  className="hidden"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) handleTranscribe(f);
+                  }}
+                />
+                <input
+                  ref={docInputRef}
+                  type="file"
+                  accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                  className="hidden"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) handleParseDoc(f);
+                  }}
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={aiLoading !== null}
+                  onClick={() => audioInputRef.current?.click()}
+                  className="gap-1.5"
+                >
+                  <Mic className="h-3.5 w-3.5" />
+                  {aiLoading === "audio" ? "Transkribiere..." : "MP3 transkribieren"}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={aiLoading !== null}
+                  onClick={() => docInputRef.current?.click()}
+                  className="gap-1.5"
+                >
+                  <FileText className="h-3.5 w-3.5" />
+                  {aiLoading === "doc" ? "Lese Dokument..." : "PDF/Word importieren"}
+                </Button>
+              </div>
             </div>
 
             {/* Video URL */}
@@ -607,6 +722,17 @@ export function ModuleManagement() {
                 onChange={(e) => setForm((f) => ({ ...f, videoUrl: e.target.value }))}
                 placeholder="https://..."
               />
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={aiLoading !== null || !form.content.trim()}
+                onClick={handleGenerateVideo}
+                className="gap-1.5"
+              >
+                <Film className="h-3.5 w-3.5" />
+                {aiLoading === "video" ? "Generiere Video..." : "Strichmännchen-Video generieren"}
+              </Button>
             </div>
 
             {/* Quiz Questions */}
