@@ -12,6 +12,7 @@ import {
 import { NavLink } from "@/components/NavLink";
 import { useAuth } from "@/context/AuthContext";
 import { useApp } from "@/context/AppContext";
+import { PetraTooltip } from "@/components/PetraTooltip";
 import {
   Sidebar,
   SidebarContent,
@@ -27,16 +28,16 @@ import { Button } from "@/components/ui/button";
 import { SidebarSearch } from "@/components/SidebarSearch";
 
 const userItems = [
-  { title: "Dashboard", url: "/", icon: LayoutDashboard },
-  { title: "Lernmodule", url: "/modules", icon: BookOpen },
-  { title: "Bibliothek", url: "/library", icon: Library },
+  { title: "Dashboard", url: "/", icon: LayoutDashboard, hint: "Dein persönliches Cockpit – Fortschritt, aktuelles Modul und nächste Schritte auf einen Blick." },
+  { title: "Lernmodule", url: "/modules", icon: BookOpen, hint: "Hier findest du alle Lernmodule deines Onboardings, sortiert nach Kategorien." },
+  { title: "Bibliothek", url: "/library", icon: Library, hint: "Nachschlagewerke, Leitfäden und Vorlagen für deinen Praxisalltag." },
 ];
 
 const adminItems = [
-  { title: "Dashboard", url: "/", icon: LayoutDashboard },
-  { title: "Lernmodule", url: "/modules", icon: BookOpen },
-  { title: "Team-Übersicht", url: "/admin", icon: UsersRound },
-  { title: "Benutzerverwaltung", url: "/users", icon: UserCog },
+  { title: "Dashboard", url: "/", icon: LayoutDashboard, hint: "Übersicht über deine eigene Aktivität als Praxisleitung." },
+  { title: "Lernmodule", url: "/modules", icon: BookOpen, hint: "Module ansehen, neu anlegen und die Reihenfolge per Drag & Drop verwalten." },
+  { title: "Team-Übersicht", url: "/admin", icon: UsersRound, hint: "Beobachte den Onboarding-Fortschritt deines gesamten Teams." },
+  { title: "Benutzerverwaltung", url: "/users", icon: UserCog, hint: "Benutzer anlegen, Rollen vergeben und Berechtigungen einsehen." },
 ];
 
 export function AppSidebar() {
@@ -68,17 +69,19 @@ export function AppSidebar() {
             <SidebarMenu>
               {items.map((item) => (
                 <SidebarMenuItem key={item.title}>
-                  <SidebarMenuButton asChild>
-                    <NavLink
-                      to={item.url}
-                      end={item.url === "/"}
-                      className="hover:bg-sidebar-accent/60"
-                      activeClassName="bg-sidebar-accent text-sidebar-accent-foreground font-medium"
-                    >
-                      <item.icon className="mr-2 h-4 w-4" />
-                      {!collapsed && <span>{item.title}</span>}
-                    </NavLink>
-                  </SidebarMenuButton>
+                  <PetraTooltip text={item.hint} title={item.title} side="right">
+                    <SidebarMenuButton asChild>
+                      <NavLink
+                        to={item.url}
+                        end={item.url === "/"}
+                        className="hover:bg-sidebar-accent/60"
+                        activeClassName="bg-sidebar-accent text-sidebar-accent-foreground font-medium"
+                      >
+                        <item.icon className="mr-2 h-4 w-4" />
+                        {!collapsed && <span>{item.title}</span>}
+                      </NavLink>
+                    </SidebarMenuButton>
+                  </PetraTooltip>
                 </SidebarMenuItem>
               ))}
             </SidebarMenu>
@@ -108,19 +111,31 @@ export function AppSidebar() {
               {profile?.full_name || profile?.email || "Benutzer"}
               <span className="ml-1 text-primary capitalize">({role})</span>
             </div>
-            <Button
-              variant="outline"
-              size="sm"
-              className="w-full text-xs"
-              onClick={signOut}
+            <PetraTooltip
+              text="Beendet deine Sitzung sicher. Du musst dich danach erneut anmelden."
+              title="Abmelden"
+              side="top"
             >
-              <LogOut className="mr-1 h-3 w-3" /> Abmelden
-            </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full text-xs"
+                onClick={signOut}
+              >
+                <LogOut className="mr-1 h-3 w-3" /> Abmelden
+              </Button>
+            </PetraTooltip>
           </>
         )}
-        <Button variant="ghost" size="icon" className="w-full" onClick={toggleSidebar}>
-          {collapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
-        </Button>
+        <PetraTooltip
+          text={collapsed ? "Klappt die Seitenleiste auf, damit du Beschriftungen und Suche siehst." : "Reduziert die Seitenleiste auf Icons – mehr Platz für Inhalte."}
+          title={collapsed ? "Sidebar öffnen" : "Sidebar einklappen"}
+          side="right"
+        >
+          <Button variant="ghost" size="icon" className="w-full" onClick={toggleSidebar}>
+            {collapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
+          </Button>
+        </PetraTooltip>
       </SidebarFooter>
     </Sidebar>
   );

@@ -21,6 +21,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useTeamMembers } from "@/hooks/useTeamMembers";
 import { type AppRole, ROLE_LABELS, getRoleBadgeClass, getInitials } from "@/lib/team-utils";
+import { PetraTooltip } from "@/components/PetraTooltip";
 
 function CollapsibleSection({ title, defaultOpen = true, children }: { title: string; defaultOpen?: boolean; children: React.ReactNode }) {
   const [open, setOpen] = useState(defaultOpen);
@@ -160,9 +161,11 @@ export default function AdminView() {
           </CollapsibleTrigger>
           <Dialog open={addOpen} onOpenChange={setAddOpen}>
             <DialogTrigger asChild>
-              <Button size="sm" className="gap-1.5">
-                <UserPlus className="h-4 w-4" /> Neues Teammitglied
-              </Button>
+              <PetraTooltip text="Legt ein neues Team-Mitglied an: Name, E-Mail, Passwort und Rolle festlegen – fertig." title="Neues Mitglied">
+                <Button size="sm" className="gap-1.5">
+                  <UserPlus className="h-4 w-4" /> Neues Teammitglied
+                </Button>
+              </PetraTooltip>
             </DialogTrigger>
             <DialogContent>
               <DialogHeader>
@@ -239,9 +242,11 @@ export default function AdminView() {
                     <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${getRoleBadgeClass(m.role)}`}>
                       {ROLE_LABELS[m.role]}
                     </span>
-                    <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={() => openEdit(m)}>
-                      <Pencil className="h-3.5 w-3.5" />
-                    </Button>
+                    <PetraTooltip text="Mitglied bearbeiten: Name und Rolle ändern oder das Konto entfernen." title="Bearbeiten">
+                      <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={() => openEdit(m)}>
+                        <Pencil className="h-3.5 w-3.5" />
+                      </Button>
+                    </PetraTooltip>
                   </motion.div>
                 );
               })}

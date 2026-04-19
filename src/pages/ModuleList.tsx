@@ -14,6 +14,7 @@ import { LearningProgress } from "@/components/modules/LearningProgress";
 import { CategoryManager } from "@/components/CategoryManager";
 import { useToast } from "@/hooks/use-toast";
 import { useRealtimeRefresh } from "@/hooks/useRealtimeRefresh";
+import { PetraTooltip } from "@/components/PetraTooltip";
 
 interface DbModule {
   id: string;
@@ -333,14 +334,18 @@ export default function ModuleList() {
       {isAdmin ? (
         <Tabs defaultValue="overview" className="w-full">
           <TabsList>
-            <TabsTrigger value="overview" className="gap-1.5">
-              <BookOpen className="h-4 w-4" />
-              Übersicht
-            </TabsTrigger>
-            <TabsTrigger value="manage" className="gap-1.5">
-              <Settings className="h-4 w-4" />
-              Verwaltung
-            </TabsTrigger>
+            <PetraTooltip text="Schaut die Module aus Sicht der Lernenden an – inklusive Fortschritt und Reihenfolge." title="Übersicht">
+              <TabsTrigger value="overview" className="gap-1.5">
+                <BookOpen className="h-4 w-4" />
+                Übersicht
+              </TabsTrigger>
+            </PetraTooltip>
+            <PetraTooltip text="Hier kannst du Module anlegen, bearbeiten, deaktivieren oder löschen." title="Modulverwaltung">
+              <TabsTrigger value="manage" className="gap-1.5">
+                <Settings className="h-4 w-4" />
+                Verwaltung
+              </TabsTrigger>
+            </PetraTooltip>
           </TabsList>
           <TabsContent value="overview" className="mt-4">
             <div className="flex gap-6">

@@ -5,6 +5,7 @@ import { DialogBubble } from "@/components/DialogBubble";
 import { useApp } from "@/context/AppContext";
 import { useAuth } from "@/context/AuthContext";
 import { Button } from "@/components/ui/button";
+import { PetraTooltip } from "@/components/PetraTooltip";
 import { BookOpen, ArrowRight } from "lucide-react";
 import { motion } from "framer-motion";
 
@@ -40,9 +41,11 @@ export default function Dashboard() {
           <p className="text-sm text-muted-foreground mt-1 mb-4">
             Lerne die wichtigsten Triage-Protokolle und Entscheidungsbäume kennen.
           </p>
-          <Button size="sm" onClick={() => navigate("/modules/triage")}>
-            Fortsetzen <ArrowRight className="ml-1 h-3 w-3" />
-          </Button>
+          <PetraTooltip text="Springt direkt in das Modul, an dem du zuletzt gearbeitet hast – inklusive Video, Inhalt und Quiz." title="Modul fortsetzen">
+            <Button size="sm" onClick={() => navigate("/modules/triage")}>
+              Fortsetzen <ArrowRight className="ml-1 h-3 w-3" />
+            </Button>
+          </PetraTooltip>
         </motion.div>
 
         <motion.div
@@ -61,9 +64,11 @@ export default function Dashboard() {
           <p className="text-sm text-muted-foreground mt-1 mb-4">
             5 Fragen · ca. 5 Minuten · Bestehensgrenze 80%
           </p>
-          <Button variant="outline" size="sm" onClick={() => navigate("/modules/triage")}>
-            Zum Quiz
-          </Button>
+          <PetraTooltip text="Öffnet das nächste Quiz. Ab 80 % richtigen Antworten erhöht sich dein Kompetenz-Score." title="Quiz starten">
+            <Button variant="outline" size="sm" onClick={() => navigate("/modules/triage")}>
+              Zum Quiz
+            </Button>
+          </PetraTooltip>
         </motion.div>
       </div>
 

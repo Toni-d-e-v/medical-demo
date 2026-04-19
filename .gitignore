@@ -20,6 +20,10 @@ dist-ssr
 # Supabase CLI local cache
 supabase/.temp/
 
+# Source snapshots / zips
+*.zip
+*:Zone.Identifier
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

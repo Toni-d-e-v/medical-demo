@@ -22,6 +22,7 @@ import { motion } from "framer-motion";
 import { UserPlus, Shield, Users, User, ShieldCheck, ShieldAlert, Pencil } from "lucide-react";
 import { useTeamMembers } from "@/hooks/useTeamMembers";
 import { type AppRole, ROLE_LABELS, ROLE_COLORS, getInitials } from "@/lib/team-utils";
+import { PetraTooltip } from "@/components/PetraTooltip";
 
 const ROLE_ICONS: Record<AppRole, React.ReactNode> = {
   master_admin: <ShieldAlert className="h-3.5 w-3.5" />,
@@ -288,9 +289,11 @@ export function UserManagement() {
           </div>
           <Dialog open={createOpen} onOpenChange={setCreateOpen}>
             <DialogTrigger asChild>
-              <Button size="sm" className="gap-1.5">
-                <UserPlus className="h-4 w-4" /> Neuer Benutzer
-              </Button>
+              <PetraTooltip text="Erstellt einen neuen Benutzer mit E-Mail, Passwort und Rolle. Master Admins können auch Admin-Rollen vergeben." title="Neuer Benutzer">
+                <Button size="sm" className="gap-1.5">
+                  <UserPlus className="h-4 w-4" /> Neuer Benutzer
+                </Button>
+              </PetraTooltip>
             </DialogTrigger>
             <DialogContent>
               <DialogHeader>
@@ -405,9 +408,11 @@ export function UserManagement() {
                       </TableCell>
                       <TableCell className="text-right">
                         {editUserId !== user.id && (
-                          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => { setEditUserId(user.id); setEditRole(user.role); }}>
-                            <Pencil className="h-3.5 w-3.5" />
-                          </Button>
+                          <PetraTooltip text="Ändert die Rolle dieses Benutzers. Die Auswahl hängt von deinen eigenen Rechten ab." title="Rolle ändern">
+                            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => { setEditUserId(user.id); setEditRole(user.role); }}>
+                              <Pencil className="h-3.5 w-3.5" />
+                            </Button>
+                          </PetraTooltip>
                         )}
                       </TableCell>
                     </motion.tr>

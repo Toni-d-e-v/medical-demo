@@ -8,7 +8,9 @@ import { DialogBubble } from "@/components/DialogBubble";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
-import { ArrowLeft, CheckCircle2, XCircle, Video, Pencil, Save, X, Upload, Trash2, FileText, Download } from "lucide-react";
+import { ArrowLeft, CheckCircle2, XCircle, Video, Pencil, Save, X, Upload, Trash2, FileText, Download, Wand2, Sparkles } from "lucide-react";
+import { StickmanPlayer, type ExplainerScene } from "@/components/StickmanPlayer";
+import { PetraTooltip } from "@/components/PetraTooltip";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -40,6 +42,11 @@ interface QuizQuestion {
   correctIndex: number;
 }
 
+interface ExplainerScript {
+  scenes: ExplainerScene[];
+  generatedAt?: string;
+}
+
 interface ModuleData {
   id: string;
   title: string;
@@ -50,6 +57,7 @@ interface ModuleData {
   category: string;
   video_url: string | null;
   pdf_url: string | null;
+  explainer_script: ExplainerScript | null;
 }
 
 export default function ModuleDetail() {
@@ -81,6 +89,8 @@ export default function ModuleDetail() {
   const [uploadedVideoUrl, setUploadedVideoUrl] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const [downloadPromptOpen, setDownloadPromptOpen] = useState(false);
+  const [explainerGenerating, setExplainerGenerating] = useState(false);
+  const [explainerSceneCount, setExplainerSceneCount] = useState(5);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const pdfInputRef = useRef<HTMLInputElement>(null);
   const startEditing = () => {
@@ -175,6 +185,43 @@ export default function ModuleDetail() {
     const file = e.target.files?.[0];
     if (file) handlePdfUpload(file);
     if (pdfInputRef.current) pdfInputRef.current.value = "";
+  };
+
+  const generateExplainer = async () => {
+    if (!mod) return;
+    const sourceText = (editing ? editContent || editDescription : mod.content || mod.description).trim();
+    if (sourceText.length < 20) {
+      toast.error("Beschreibung/Lerninhalt zu kurz für ein Erklärvideo (mind. 20 Zeichen).");
+      return;
+    }
+    setExplainerGenerating(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("generate-explainer", {
+        body: {
+          description: sourceText,
+          title: mod.title,
+          sceneCount: explainerSceneCount,
+        },
+      });
+      if (error) throw error;
+      if ((data as any)?.error) throw new Error((data as any).error);
+      const result = data as { scenes: ExplainerScene[]; generatedAt: string };
+      if (!result.scenes || result.scenes.length === 0) {
+        throw new Error("Keine Szenen erhalten");
+      }
+      const payload: ExplainerScript = { scenes: result.scenes, generatedAt: result.generatedAt };
+      const { error: upErr } = await supabase
+        .from("modules")
+        .update({ explainer_script: payload as any })
+        .eq("id", mod.id);
+      if (upErr) throw upErr;
+      setMod({ ...mod, explainer_script: payload });
+      toast.success("Erklärvideo erstellt");
+    } catch (err: any) {
+      toast.error("Fehler: " + (err.message || "unbekannt"));
+    } finally {
+      setExplainerGenerating(false);
+    }
   };
 
   const confirmDownloadPdf = () => {
@@ -510,6 +557,65 @@ export default function ModuleDetail() {
                     <Download className="h-4 w-4" />
                     PDF herunterladen
                   </Button>
+                )}
+              </div>
+            )}
+
+            {(editing || mod.explainer_script) && (
+              <div className="bg-card rounded-xl border p-6">
+                <div className="flex items-center gap-2 mb-3">
+                  <Sparkles className="h-5 w-5 text-primary" />
+                  <h3 className="font-display font-semibold">Strichmännchen-Erklärvideo</h3>
+                </div>
+                {mod.explainer_script && mod.explainer_script.scenes?.length > 0 ? (
+                  <div className="space-y-3">
+                    <StickmanPlayer scenes={mod.explainer_script.scenes} />
+                    {editing && (
+                      <p className="text-xs text-muted-foreground">
+                        Erstellt am: {mod.explainer_script.generatedAt?.slice(0, 10) || "–"}
+                      </p>
+                    )}
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground">
+                    Noch kein Erklärvideo vorhanden.
+                  </p>
+                )}
+                {editing && isAdmin && (
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
+                    <label className="text-xs text-muted-foreground">
+                      Szenen:
+                      <select
+                        value={explainerSceneCount}
+                        onChange={(e) => setExplainerSceneCount(Number(e.target.value))}
+                        className="ml-1 bg-background border rounded px-1 py-0.5 text-xs"
+                        disabled={explainerGenerating}
+                      >
+                        {[3, 4, 5, 6, 7, 8].map((n) => (
+                          <option key={n} value={n}>{n}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <PetraTooltip
+                      text="Erstellt mit KI ein kurzes animiertes Strichmännchen-Video mit Sprecher-Stimme – basierend auf dem Lerninhalt."
+                      title="Erklärvideo generieren"
+                    >
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={generateExplainer}
+                        disabled={explainerGenerating}
+                        className="gap-1.5"
+                      >
+                        <Wand2 className="h-3.5 w-3.5" />
+                        {explainerGenerating
+                          ? "Generiere..."
+                          : mod.explainer_script
+                            ? "Neu generieren"
+                            : "Video generieren"}
+                      </Button>
+                    </PetraTooltip>
+                  </div>
                 )}
               </div>
             )}
