@@ -24,10 +24,10 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) {
+    const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
+    if (!OPENAI_API_KEY) {
       return new Response(
-        JSON.stringify({ error: "LOVABLE_API_KEY ist nicht konfiguriert." }),
+        JSON.stringify({ error: "OPENAI_API_KEY ist nicht konfiguriert." }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
@@ -50,7 +50,6 @@ Deno.serve(async (req) => {
       );
     }
 
-    // If a PDF was sent, extract text server-side via unpdf
     let extractedText = "";
     if (typeof body.pdfBase64 === "string" && body.pdfBase64.length > 0) {
       try {
@@ -82,69 +81,55 @@ Deno.serve(async (req) => {
       );
     }
 
-    const text = extractedText.slice(0, 200_000); // cap ~200k chars
+    const text = extractedText.slice(0, 200_000);
     const moduleTitle = (body.moduleTitle || "").slice(0, 200);
     const moduleCategory = (body.moduleCategory || "").slice(0, 100);
-    const mode = body.mode === "structure" ? "structure" : "analyze";
 
     const systemPrompt =
       "Du bist eine Expertin für medizinische Praxisorganisation und erstellst klare Lerninhalte auf Deutsch (Schweizer Hochdeutsch, ohne ß). " +
       "Antworte ausschliesslich mit gültigem JSON ohne Markdown-Codeblöcke.";
 
-    let userInstruction = "";
+    const userInstruction =
+      `Analysiere den folgenden Dokumenttext${moduleTitle ? ` für das Lernmodul "${moduleTitle}"` : ""}` +
+      `${moduleCategory ? ` (Kategorie: ${moduleCategory})` : ""}.\n\n` +
+      `Beurteile, ob der Text bereits klar strukturiert ist (mit Überschriften, Abschnitten, Aufzählungen, klarem Aufbau).\n\n` +
+      `Gib ein JSON-Objekt zurück mit genau diesen Feldern:\n` +
+      `{\n` +
+      `  "isStructured": true|false,\n` +
+      `  "reason": "Kurze Begründung (1 Satz) auf Deutsch.",\n` +
+      `  "suggestedDescription": "Kurze, prägnante Zusammenfassung in 1–2 Sätzen (max. 250 Zeichen).",\n` +
+      `  "originalContent": "Der Originaltext, leicht aufbereitet (Whitespace bereinigt, Absätze erhalten). KEINE inhaltlichen Änderungen.",\n` +
+      `  "structuredContent": "Falls isStructured=false: Eine neu strukturierte Version mit Absätzen und ggf. Aufzählungen (- ). Falls isStructured=true: identisch mit originalContent."\n` +
+      `}\n\n` +
+      `DOKUMENTTEXT:\n${text}`;
 
-    if (mode === "analyze") {
-      userInstruction =
-        `Analysiere den folgenden Dokumenttext${moduleTitle ? ` für das Lernmodul "${moduleTitle}"` : ""}` +
-        `${moduleCategory ? ` (Kategorie: ${moduleCategory})` : ""}.\n\n` +
-        `Beurteile, ob der Text bereits klar strukturiert ist (mit Überschriften, Abschnitten, Aufzählungen, klarem Aufbau).\n\n` +
-        `Gib ein JSON-Objekt zurück mit genau diesen Feldern:\n` +
-        `{\n` +
-        `  "isStructured": true|false,\n` +
-        `  "reason": "Kurze Begründung (1 Satz) auf Deutsch.",\n` +
-        `  "suggestedDescription": "Kurze, prägnante Zusammenfassung in 1–2 Sätzen (max. 250 Zeichen).",\n` +
-        `  "originalContent": "Der Originaltext, leicht aufbereitet (Whitespace bereinigt, Absätze erhalten). KEINE inhaltlichen Änderungen.",\n` +
-        `  "structuredContent": "Falls isStructured=false: Eine neu strukturierte Version mit Absätzen und ggf. Aufzählungen (- ). Falls isStructured=true: identisch mit originalContent."\n` +
-        `}\n\n` +
-        `DOKUMENTTEXT:\n${text}`;
-    }
-
-    const aiResponse = await fetch(
-      "https://ai.gateway.lovable.dev/v1/chat/completions",
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${LOVABLE_API_KEY}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: "google/gemini-2.5-flash",
-          messages: [
-            { role: "system", content: systemPrompt },
-            { role: "user", content: userInstruction },
-          ],
-          response_format: { type: "json_object" },
-        }),
+    const aiResponse = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${OPENAI_API_KEY}`,
+        "Content-Type": "application/json",
       },
-    );
+      body: JSON.stringify({
+        model: "gpt-4o-mini",
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userInstruction },
+        ],
+        response_format: { type: "json_object" },
+      }),
+    });
 
     if (!aiResponse.ok) {
       const errText = await aiResponse.text();
-      console.error("AI gateway error:", aiResponse.status, errText);
+      console.error("OpenAI error:", aiResponse.status, errText);
       if (aiResponse.status === 429) {
         return new Response(
           JSON.stringify({ error: "Rate Limit erreicht. Bitte später erneut versuchen." }),
           { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } },
         );
       }
-      if (aiResponse.status === 402) {
-        return new Response(
-          JSON.stringify({ error: "Lovable AI Guthaben aufgebraucht. Bitte Credits hinzufügen." }),
-          { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-        );
-      }
       return new Response(
-        JSON.stringify({ error: `AI-Gateway Fehler (${aiResponse.status})` }),
+        JSON.stringify({ error: `OpenAI Fehler (${aiResponse.status})` }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }

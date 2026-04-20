@@ -8,7 +8,8 @@ import { DialogBubble } from "@/components/DialogBubble";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
-import { ArrowLeft, CheckCircle2, XCircle, Video, Pencil, Save, X, Upload, Trash2, FileText, Download, Wand2, Sparkles } from "lucide-react";
+import { ArrowLeft, CheckCircle2, XCircle, Video, Pencil, Save, X, Upload, Trash2, FileText, Download, Wand2, Sparkles, Mic } from "lucide-react";
+import mammoth from "mammoth";
 import { StickmanPlayer, type ExplainerScene } from "@/components/StickmanPlayer";
 import { PetraTooltip } from "@/components/PetraTooltip";
 import {
@@ -93,6 +94,25 @@ export default function ModuleDetail() {
   const [explainerSceneCount, setExplainerSceneCount] = useState(5);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const pdfInputRef = useRef<HTMLInputElement>(null);
+
+  const [audioProcessing, setAudioProcessing] = useState(false);
+  const [audioDragOver, setAudioDragOver] = useState(false);
+  const [audioFileName, setAudioFileName] = useState<string | null>(null);
+  const audioInputRef = useRef<HTMLInputElement>(null);
+
+  const [docProcessing, setDocProcessing] = useState(false);
+  const [docDragOver, setDocDragOver] = useState(false);
+  const [docFileName, setDocFileName] = useState<string | null>(null);
+  const docInputRef = useRef<HTMLInputElement>(null);
+  const [docDialogOpen, setDocDialogOpen] = useState(false);
+  const [docAnalysis, setDocAnalysis] = useState<{
+    isStructured: boolean;
+    reason: string;
+    suggestedDescription: string;
+    originalContent: string;
+    structuredContent: string;
+  } | null>(null);
+
   const startEditing = () => {
     if (!mod) return;
     setEditContent(mod.content || "");
@@ -185,6 +205,148 @@ export default function ModuleDetail() {
     const file = e.target.files?.[0];
     if (file) handlePdfUpload(file);
     if (pdfInputRef.current) pdfInputRef.current.value = "";
+  };
+
+  const handleAudioTranscribe = async (file: File) => {
+    if (!mod) return;
+    if (!file.type.startsWith("audio/") && !file.name.toLowerCase().match(/\.(mp3|wav|m4a|ogg|aac)$/)) {
+      toast.error("Bitte nur Audiodateien (MP3, WAV, M4A, …) hochladen");
+      return;
+    }
+    if (file.size > 25 * 1024 * 1024) {
+      toast.error("Maximale Audiogrösse: 25 MB");
+      return;
+    }
+    setAudioProcessing(true);
+    setAudioFileName(file.name);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const { data, error } = await supabase.functions.invoke("transcribe-audio", { body: formData });
+      if (error) throw error;
+      const text = (data as { text?: string } | null)?.text?.trim();
+      if (!text) throw new Error("Keine Transkription erhalten");
+      setEditContent((prev) => (prev ? `${prev}\n\n${text}` : text));
+      toast.success(`Transkription eingefügt (${text.length} Zeichen)`);
+    } catch (e: any) {
+      toast.error("Fehler bei der Audio-Verarbeitung: " + (e?.message ?? "Unbekannt"));
+    } finally {
+      setAudioProcessing(false);
+    }
+  };
+
+  const handleAudioDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setAudioDragOver(false);
+    const file = e.dataTransfer.files[0];
+    if (file) handleAudioTranscribe(file);
+  };
+
+  const handleAudioFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) handleAudioTranscribe(file);
+    if (audioInputRef.current) audioInputRef.current.value = "";
+  };
+
+  const fileToBase64 = (file: File): Promise<string> =>
+    new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const result = reader.result as string;
+        const base64 = result.includes(",") ? result.split(",")[1] : result;
+        resolve(base64);
+      };
+      reader.onerror = () => reject(reader.error);
+      reader.readAsDataURL(file);
+    });
+
+  const extractTextFromNonPdf = async (file: File): Promise<string> => {
+    const name = file.name.toLowerCase();
+    const ext = name.split(".").pop() || "";
+    if (ext === "docx" || file.type === "application/vnd.openxmlformats-officedocument.wordprocessingml.document") {
+      const arrayBuffer = await file.arrayBuffer();
+      const result = await mammoth.extractRawText({ arrayBuffer });
+      return result.value.trim();
+    }
+    if (ext === "doc") {
+      throw new Error("Altes .doc-Format wird nicht unterstützt. Bitte als .docx oder PDF speichern.");
+    }
+    if (ext === "txt" || ext === "md" || ext === "markdown" || ext === "rtf" || file.type.startsWith("text/")) {
+      return (await file.text()).trim();
+    }
+    throw new Error(`Dateiformat .${ext} wird nicht unterstützt. Erlaubt: PDF, DOCX, TXT, MD.`);
+  };
+
+  const handleDocumentImport = async (file: File) => {
+    if (!mod) return;
+    if (file.size > 20 * 1024 * 1024) {
+      toast.error("Maximale Dateigrösse: 20 MB");
+      return;
+    }
+    setDocProcessing(true);
+    setDocFileName(file.name);
+    try {
+      const ext = (file.name.split(".").pop() || "").toLowerCase();
+      const isPdf = ext === "pdf" || file.type === "application/pdf";
+      const payload: Record<string, unknown> = {
+        fileName: file.name,
+        moduleTitle: mod.title,
+        moduleCategory: mod.category,
+        mode: "analyze",
+      };
+      if (isPdf) {
+        payload.pdfBase64 = await fileToBase64(file);
+      } else {
+        const text = await extractTextFromNonPdf(file);
+        if (!text || text.length < 20) throw new Error("Kein Text gefunden oder Dokument leer.");
+        payload.text = text;
+      }
+      const { data, error } = await supabase.functions.invoke("analyze-document", { body: payload });
+      if (error) throw error;
+      if ((data as any)?.error) throw new Error((data as any).error);
+      const result = data as {
+        isStructured: boolean;
+        reason: string;
+        suggestedDescription: string;
+        originalContent: string;
+        structuredContent: string;
+      };
+      setDocAnalysis(result);
+      setDocDialogOpen(true);
+    } catch (e: any) {
+      toast.error("Fehler beim Dokument-Import: " + (e?.message ?? "Unbekannt"));
+    } finally {
+      setDocProcessing(false);
+    }
+  };
+
+  const handleDocDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setDocDragOver(false);
+    const file = e.dataTransfer.files[0];
+    if (file) handleDocumentImport(file);
+  };
+
+  const handleDocFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) handleDocumentImport(file);
+    if (docInputRef.current) docInputRef.current.value = "";
+  };
+
+  const applyDocIdentical = () => {
+    if (!docAnalysis) return;
+    if (docAnalysis.suggestedDescription) setEditDescription(docAnalysis.suggestedDescription);
+    setEditContent(docAnalysis.originalContent);
+    setDocDialogOpen(false);
+    toast.success("Originalinhalt übernommen");
+  };
+
+  const applyDocStructured = () => {
+    if (!docAnalysis) return;
+    if (docAnalysis.suggestedDescription) setEditDescription(docAnalysis.suggestedDescription);
+    setEditContent(docAnalysis.structuredContent);
+    setDocDialogOpen(false);
+    toast.success("Strukturierter Inhalt übernommen");
   };
 
   const generateExplainer = async () => {
@@ -382,6 +544,86 @@ export default function ModuleDetail() {
               <h2 className="font-display font-semibold mb-3">Lerninhalt</h2>
               {editing ? (
                 <div className="space-y-3">
+                  <div className="rounded-lg border border-dashed border-primary/30 bg-primary/5 p-3">
+                    <div className="flex items-center gap-1.5 mb-2">
+                      <Sparkles className="h-3.5 w-3.5 text-primary" />
+                      <label className="text-xs font-semibold text-primary">
+                        KI-Transkription aus Audio (MP3, WAV, M4A …)
+                      </label>
+                    </div>
+                    <div
+                      onDragOver={(e) => { e.preventDefault(); setAudioDragOver(true); }}
+                      onDragLeave={() => setAudioDragOver(false)}
+                      onDrop={handleAudioDrop}
+                      onClick={() => !audioProcessing && audioInputRef.current?.click()}
+                      className={`border-2 border-dashed rounded-lg p-3 text-center cursor-pointer transition-colors ${
+                        audioDragOver ? "border-primary bg-primary/10" : "border-muted-foreground/30 hover:border-primary/50"
+                      } ${audioProcessing ? "opacity-60 pointer-events-none" : ""}`}
+                    >
+                      <input
+                        ref={audioInputRef}
+                        type="file"
+                        accept="audio/*,.mp3,.wav,.m4a,.ogg,.aac"
+                        className="hidden"
+                        onChange={handleAudioFileSelect}
+                      />
+                      {audioProcessing ? (
+                        <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground py-2">
+                          <div className="animate-spin h-4 w-4 border-2 border-primary border-t-transparent rounded-full" />
+                          <span>Audio wird transkribiert…</span>
+                        </div>
+                      ) : (
+                        <div className="flex flex-col items-center gap-1 text-muted-foreground">
+                          <Mic className="h-5 w-5 text-primary" />
+                          <span className="text-xs">
+                            {audioFileName ? `Letzte Datei: ${audioFileName}` : "Audio-Datei hierher ziehen oder klicken"}
+                          </span>
+                          <span className="text-[10px] opacity-70">max. 25 MB · Text wird an Lerninhalt angehängt</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="rounded-lg border border-dashed border-primary/30 bg-primary/5 p-3">
+                    <div className="flex items-center gap-1.5 mb-2">
+                      <FileText className="h-3.5 w-3.5 text-primary" />
+                      <label className="text-xs font-semibold text-primary">
+                        Dokument-Import (PDF, Word, TXT, MD)
+                      </label>
+                    </div>
+                    <div
+                      onDragOver={(e) => { e.preventDefault(); setDocDragOver(true); }}
+                      onDragLeave={() => setDocDragOver(false)}
+                      onDrop={handleDocDrop}
+                      onClick={() => !docProcessing && docInputRef.current?.click()}
+                      className={`border-2 border-dashed rounded-lg p-3 text-center cursor-pointer transition-colors ${
+                        docDragOver ? "border-primary bg-primary/10" : "border-muted-foreground/30 hover:border-primary/50"
+                      } ${docProcessing ? "opacity-60 pointer-events-none" : ""}`}
+                    >
+                      <input
+                        ref={docInputRef}
+                        type="file"
+                        accept=".pdf,.docx,.txt,.md,.markdown,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,text/markdown"
+                        className="hidden"
+                        onChange={handleDocFileSelect}
+                      />
+                      {docProcessing ? (
+                        <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground py-2">
+                          <div className="animate-spin h-4 w-4 border-2 border-primary border-t-transparent rounded-full" />
+                          <span>Dokument wird analysiert…</span>
+                        </div>
+                      ) : (
+                        <div className="flex flex-col items-center gap-1 text-muted-foreground">
+                          <FileText className="h-5 w-5 text-primary" />
+                          <span className="text-xs">
+                            {docFileName ? `Letzte Datei: ${docFileName}` : "Dokument hierher ziehen oder klicken"}
+                          </span>
+                          <span className="text-[10px] opacity-70">max. 20 MB · PDF · DOCX · TXT · MD</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
                   <div>
                     <label className="text-xs font-medium text-muted-foreground mb-1 block">Beschreibung</label>
                     <Textarea
@@ -762,6 +1004,38 @@ export default function ModuleDetail() {
           <AlertDialogFooter>
             <AlertDialogCancel>Abbrechen</AlertDialogCancel>
             <AlertDialogAction onClick={confirmDownloadPdf}>Herunterladen</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={docDialogOpen} onOpenChange={setDocDialogOpen}>
+        <AlertDialogContent className="max-w-2xl">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Dokument analysiert</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-3 text-sm">
+                <p>
+                  {docAnalysis?.isStructured
+                    ? "Das Dokument ist bereits gut strukturiert."
+                    : "Das Dokument könnte strukturierter präsentiert werden."}
+                  {docAnalysis?.reason ? ` ${docAnalysis.reason}` : ""}
+                </p>
+                {docAnalysis?.suggestedDescription && (
+                  <div className="rounded-md border bg-muted/50 p-2">
+                    <div className="text-xs font-medium text-muted-foreground mb-1">Vorgeschlagene Beschreibung</div>
+                    <div>{docAnalysis.suggestedDescription}</div>
+                  </div>
+                )}
+                <p className="text-xs text-muted-foreground">
+                  Bestehende Beschreibung &amp; Lerninhalt werden überschrieben.
+                </p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="gap-2 sm:gap-2">
+            <AlertDialogCancel>Abbrechen</AlertDialogCancel>
+            <AlertDialogAction onClick={applyDocIdentical}>Original übernehmen</AlertDialogAction>
+            <AlertDialogAction onClick={applyDocStructured}>Strukturiert übernehmen</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
